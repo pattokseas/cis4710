@@ -1,4 +1,4 @@
-/* INSERT NAME AND PENNKEY HERE */
+/* Matthew Pattok (mpattok) */
 
 `timescale 1ns / 1ns
 
@@ -10,8 +10,33 @@ module divider_unsigned (
     output wire [31:0] o_remainder,
     output wire [31:0] o_quotient
 );
+    
+    // wires we need: initial values + 32 outputs
+    wire [31:0] remainders[33];
+    wire [31:0] quotients[33];
+    wire [31:0] dividends[33];
 
-    // TODO: your code here
+    // assign initial values
+    assign remainders[0] = 32'b0;
+    assign quotients[0] = 32'b0;
+    assign dividends[0] = i_dividend;
+
+    // run the loop, assigning output for i-1 to values for i
+    genvar i;
+    for(i = 1; i < 33; i = i + 1) begin
+        divu_1iter iter(
+		.i_dividend(dividends[i - 1]), 
+		.i_divisor(i_divisor),
+		.i_remainder(remainders[i - 1]), 
+		.i_quotient(quotients[i - 1]),
+		.o_dividend(dividends[i]), 
+		.o_remainder(remainders[i]),
+		.o_quotient(quotients[i])
+	);
+    end
+
+    assign o_remainder = remainders[32];
+    assign o_quotient = quotients[32];
 
 endmodule
 
@@ -38,6 +63,11 @@ module divu_1iter (
     }
     */
 
-    // TODO: your code here
+    wire [31:0] remainder = (i_remainder << 1) | ((i_dividend >> 31) & 32'b1);
+    wire lt = remainder < i_divisor;
+
+    assign o_remainder = lt ? remainder : remainder - i_divisor;
+    assign o_quotient = lt ? i_quotient << 1 : (i_quotient << 1) | 32'b1;
+    assign o_dividend = i_dividend << 1;
 
 endmodule

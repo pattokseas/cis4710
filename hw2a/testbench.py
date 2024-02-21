@@ -63,12 +63,20 @@ if __name__ == "__main__":
 ## TEST CASES ARE HERE ##
 #########################
 
+def mydebug(q, r):
+    line = "-----------------------\n"
+    print(line * 5, end="")
+    print(q)
+    print(r)
+    print(line * 5, end="")
+
 @cocotb.test()
 async def test_simple0(dut):
     await Timer(1, "ns")
     dut.i_dividend.value = 4
     dut.i_divisor.value = 2
     await Timer(1, "ns")
+    mydebug(dut.o_quotient.value, dut.o_remainder.value)
     assert 2 == dut.o_quotient.value
     assert 0 == dut.o_remainder.value
 
@@ -78,6 +86,7 @@ async def test_simple1(dut):
     dut.i_dividend.value = 4
     dut.i_divisor.value = 4
     await Timer(1, "ns")
+    mydebug(dut.o_quotient.value, dut.o_remainder.value)
     assert 1 == dut.o_quotient.value
     assert 0 == dut.o_remainder.value
 
@@ -87,6 +96,7 @@ async def test_simple2(dut):
     dut.i_dividend.value = 10
     dut.i_divisor.value = 4
     await Timer(1, "ns")
+    mydebug(dut.o_quotient.value, dut.o_remainder.value)
     assert 2 == dut.o_quotient.value
     assert 2 == dut.o_remainder.value
 
@@ -96,6 +106,7 @@ async def test_simple3(dut):
     dut.i_dividend.value = 2
     dut.i_divisor.value = 4
     await Timer(1, "ns")
+    mydebug(dut.o_quotient.value, dut.o_remainder.value)
     assert 0 == dut.o_quotient.value
     assert 2 == dut.o_remainder.value
 
