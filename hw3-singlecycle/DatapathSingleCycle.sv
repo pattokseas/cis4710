@@ -9,6 +9,16 @@
 `include "../hw2a/divider_unsigned.sv"
 `include "../hw2b/cla.sv"
 
+module negative(input wire [31:0] in, output wire [31:0] out);
+    assign out = ~in + 1;
+endmodule
+
+module sub(input wire [31:0] x, y, output wire [31:0] out);
+    wire [31:0] minus_y;
+    negative neg(.in(y), .out(minus_y));
+    cla add(.a(x), .b(minus_y), .cin(0), .sum(out));
+endmodule
+
 module RegFile (
     input logic [4:0] rd,
     input logic [`REG_SIZE] rd_data,
@@ -24,7 +34,18 @@ module RegFile (
   localparam int NumRegs = 32;
   logic [`REG_SIZE] regs[NumRegs];
 
-  // TODO: your code here
+    assign regs[0] = 32'd0;	 // zero always zero
+
+    assign rs1_data = regs[rs1]; // read registers
+    assign rs2_data = regs[rs2];
+    
+    genvar i;
+    for(i = 1; i < NumRegs; i = i + 1) begin  // make DFFs for R1-R31
+        always_ff @(posedge clk) begin
+            if(rst) regs[i] <= 32'b0; 		       // reset
+	    else if(we && rd == i) regs[i] <= rd_data; // write
+        end
+    end
 
 endmodule
 
@@ -186,14 +207,80 @@ module DatapathSingleCycle (
     end
   end
 
+
+  // set up register file
+  logic [31:0] rd_data, rs1_data, rs2_data;
+  logic reg_we;
+  RegFile rf(.rd(insn_rd), .rs1(insn_rs1), .rs2(insn_rs2), 
+	     .rd_data(rd_data), .clk(clk), .we(reg_we), .rst(rst),
+	     .rs1_data(rs1_data), .rs2_data(rs2_data));
+  wire [31:0] imm12;
+  assign imm12 = { {21{insn_from_imem[31]}}, insn_from_imem[30:20] };
+
+  logic [31:0] rs1_plus_imm12;
+  logic [31:0] rs1_plus_rs2;
+  logic [31:0] rs1_minus_rs2;
+  cla addi(.a(rs1_data), .b(imm12), .cin(0), .sum(rs1_plus_imm12));
+  cla add(.a(rs1_data), .b(rs2_data), .cin(0), .sum(rs1_plus_rs2));
+  sub subr(.x(rs1_data), .y(rs2_data), .out(rs1_minus_rs2));
+
   logic illegal_insn;
 
   always_comb begin
     illegal_insn = 1'b0;
 
+    halt = 0;
+    pcNext = pcCurrent + 4;
+
+    reg_we = 0;
+    rd_data = 32'b0;
+
+    // pc_to_imem = pc_to_imem + 4;
+
+    // cla adder(.a(x), .b(y), .cin(0), .sum(addition));
+
     case (insn_opcode)
       OpLui: begin
-        // TODO: start here by implementing lui
+        reg_we = 1;
+	rd_data = { insn_from_imem[31:12], 12'b0 };
+      end
+      OpRegImm: begin
+        reg_we = 1;
+	case (insn_funct3)
+		3'b000 : rd_data = rs1_plus_imm12;
+		3'b010 : rd_data = ($signed(rs1_data) < $signed(imm12)) ? 32'b1 : 32'b0;
+		3'b011 : rd_data = rs1_data < imm12 ? 32'b1 : 32'b0;
+		3'b100 : rd_data = rs1_data ^ imm12;
+		3'b110 : rd_data = rs1_data | imm12; 
+		3'b111 : rd_data = rs1_data & imm12;
+		3'b001 : rd_data = rs1_data << imm12[4:0];
+		3'b101 : rd_data = insn_funct7 == 7'h0 ? rs1_data >> imm12[4:0] : rs1_data >>> imm12[4:0];
+	endcase
+      end
+      OpRegReg: begin
+        reg_we = 1;
+        case (insn_funct3)
+		3'b000 : rd_data = insn_funct7 == 7'h0 ? rs1_plus_rs2 : rs1_minus_rs2;
+                3'b001 : rd_data = rs1_data << rs2_data[4:0];
+		3'b010 : rd_data = $signed(rs1_data) < $signed(rs2_data) ? 32'b1 : 32'b0;
+		3'b011 : rd_data = rs1_data < rs2_data ? 32'b1 : 32'b0;
+		3'b100 : rd_data = rs1_data ^ rs2_data;
+		3'b101 : rd_data = insn_funct7 == 7'h0 ? rs1_data >> rs2_data[4:0] : rs1_data >>> rs2_data[4:0];
+		3'b110 : rd_data = rs1_data | rs2_data;
+		3'b111 : rd_data = rs1_data & rs2_data;
+        endcase	
+      end
+      OpBranch: begin
+	if( (insn_funct3 == 3'b000 && rs1_data == rs2_data) ||
+		(insn_funct3 == 3'b001 && rs1_data != rs2_data) ||
+		(insn_funct3 == 3'b100 && $signed(rs1_data) < $signed(rs2_data)) ||
+		(insn_funct3 == 3'b101 && $signed(rs1_data) >= $signed(rs2_data)) ||
+		(insn_funct3 == 3'b110 && rs1_data < rs2_data) ||
+		(insn_funct3 == 3'b111 && rs1_data >= rs2_data)
+	) pcNext = pcCurrent + {19'b0, imm_b};
+      end
+      OpEnviron: begin
+        halt = 1; 
       end
       default: begin
         illegal_insn = 1'b1;
