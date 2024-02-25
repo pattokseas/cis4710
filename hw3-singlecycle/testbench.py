@@ -259,10 +259,13 @@ async def testBneTaken(dut):
         lui x1,0x12345
         bne x1,x0,target
         lui x1,0x54321
-        target: lui x0,0''')
+        target: lui x0,0
+        nop
+        nop
+        nop''')
     await preTestSetup(dut)
 
-    await ClockCycles(dut.clock_proc, 3)
+    await ClockCycles(dut.clock_proc, 5)
     assert dut.datapath.rf.regs[1].value == 0x12345000, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
     pass
 
@@ -301,6 +304,8 @@ async def riscvTest(dut, binaryPath=None):
             return
         pass
     raise SimTimeoutError()
+
+
 
 # NB: this test is only for HW3B
 @cocotb.test(skip='RVTEST_ALUBR' in os.environ)

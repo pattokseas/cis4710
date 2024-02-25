@@ -214,70 +214,80 @@ module DatapathSingleCycle (
   RegFile rf(.rd(insn_rd), .rs1(insn_rs1), .rs2(insn_rs2), 
 	     .rd_data(rd_data), .clk(clk), .we(reg_we), .rst(rst),
 	     .rs1_data(rs1_data), .rs2_data(rs2_data));
-  wire [31:0] imm12;
-  assign imm12 = { {21{insn_from_imem[31]}}, insn_from_imem[30:20] };
-
-  logic [31:0] rs1_plus_imm12;
-  logic [31:0] rs1_plus_rs2;
-  logic [31:0] rs1_minus_rs2;
-  cla addi(.a(rs1_data), .b(imm12), .cin(0), .sum(rs1_plus_imm12));
-  cla add(.a(rs1_data), .b(rs2_data), .cin(0), .sum(rs1_plus_rs2));
-  sub subr(.x(rs1_data), .y(rs2_data), .out(rs1_minus_rs2));
+  
+  // set up CLA
+  logic [31:0] x, y, sum;
+  cla adder(.a(x), .b(y), .cin(0), .sum(sum));
 
   logic illegal_insn;
 
   always_comb begin
     illegal_insn = 1'b0;
 
-    halt = 0;
+    halt = 1'b0;
     pcNext = pcCurrent + 4;
 
-    reg_we = 0;
+    reg_we = 1'b0;
     rd_data = 32'b0;
-
-    // pc_to_imem = pc_to_imem + 4;
-
-    // cla adder(.a(x), .b(y), .cin(0), .sum(addition));
+    x = 32'b0;
+    y = 32'b0;
 
     case (insn_opcode)
       OpLui: begin
-        reg_we = 1;
-	rd_data = { insn_from_imem[31:12], 12'b0 };
+        reg_we = 1'b1;
+	    rd_data = { insn_from_imem[31:12], 12'b0 };
       end
       OpRegImm: begin
-        reg_we = 1;
-	case (insn_funct3)
-		3'b000 : rd_data = rs1_plus_imm12;
-		3'b010 : rd_data = ($signed(rs1_data) < $signed(imm12)) ? 32'b1 : 32'b0;
-		3'b011 : rd_data = rs1_data < imm12 ? 32'b1 : 32'b0;
-		3'b100 : rd_data = rs1_data ^ imm12;
-		3'b110 : rd_data = rs1_data | imm12; 
-		3'b111 : rd_data = rs1_data & imm12;
-		3'b001 : rd_data = rs1_data << imm12[4:0];
-		3'b101 : rd_data = insn_funct7 == 7'h0 ? rs1_data >> imm12[4:0] : rs1_data >>> imm12[4:0];
-	endcase
+            reg_we = 1;
+            x = rs1_data;
+            y = imm_i_sext;
+            if (insn_addi)  begin 
+                rd_data = sum;
+            end else if (insn_slti) begin
+                rd_data = ($signed(rs1_data) < $signed(imm_i_sext)) ? 32'b1 : 32'b0;
+		    end else if (insn_sltiu) begin 
+                rd_data = (rs1_data < imm_i_sext) ? 32'b1 : 32'b0;
+            end else if (insn_xori) begin 
+                rd_data = rs1_data ^ imm_i_sext;
+		    end else if (insn_ori) begin
+                rd_data = rs1_data | imm_i_sext; 
+            end else if (insn_andi) begin
+                rd_data = rs1_data & imm_i_sext;
+            end else if (insn_slli) begin
+                rd_data = rs1_data << imm_i_sext[4:0];
+            end else if (insn_srli) begin
+                rd_data = rs1_data >> imm_i_sext[4:0];
+            end else if (insn_srai) begin
+                rd_data = $signed(rs1_data) >>> imm_i[4:0];
+            end else begin illegal_insn = 1'b1; end
       end
       OpRegReg: begin
         reg_we = 1;
-        case (insn_funct3)
-		3'b000 : rd_data = insn_funct7 == 7'h0 ? rs1_plus_rs2 : rs1_minus_rs2;
-                3'b001 : rd_data = rs1_data << rs2_data[4:0];
-		3'b010 : rd_data = $signed(rs1_data) < $signed(rs2_data) ? 32'b1 : 32'b0;
-		3'b011 : rd_data = rs1_data < rs2_data ? 32'b1 : 32'b0;
-		3'b100 : rd_data = rs1_data ^ rs2_data;
-		3'b101 : rd_data = insn_funct7 == 7'h0 ? rs1_data >> rs2_data[4:0] : rs1_data >>> rs2_data[4:0];
-		3'b110 : rd_data = rs1_data | rs2_data;
-		3'b111 : rd_data = rs1_data & rs2_data;
-        endcase	
+        x = rs1_data;
+        y = rs2_data;
+        if      (insn_add)  rd_data = sum;
+        else if (insn_sub)  begin
+          y = ~rs2_data + 1'b1;
+          rd_data = sum;
+        end  
+        else if (insn_sll)  rd_data = rs1_data << rs2_data[4:0];
+		else if (insn_slt)  rd_data = $signed(rs1_data) < $signed(rs2_data) ? 32'b1 : 32'b0;
+		else if (insn_sltu) rd_data = (rs1_data < rs2_data) ? 32'b1 : 32'b0;
+		else if (insn_xor)  rd_data = rs1_data ^ rs2_data;
+		else if (insn_srl)  rd_data = rs1_data >> rs2_data[4:0];
+        else if (insn_sra)  rd_data = $signed(rs1_data) >>> rs2_data[4:0];
+		else if (insn_or)   rd_data = rs1_data | rs2_data;
+		else if (insn_and)  rd_data = rs1_data & rs2_data;
+        else illegal_insn = 1'b1;
       end
       OpBranch: begin
-	if( (insn_funct3 == 3'b000 && rs1_data == rs2_data) ||
-		(insn_funct3 == 3'b001 && rs1_data != rs2_data) ||
-		(insn_funct3 == 3'b100 && $signed(rs1_data) < $signed(rs2_data)) ||
-		(insn_funct3 == 3'b101 && $signed(rs1_data) >= $signed(rs2_data)) ||
-		(insn_funct3 == 3'b110 && rs1_data < rs2_data) ||
-		(insn_funct3 == 3'b111 && rs1_data >= rs2_data)
-	) pcNext = pcCurrent + {19'b0, imm_b};
+          if(   (insn_beq && rs1_data == rs2_data) ||
+		        (insn_bne && rs1_data != rs2_data) ||
+		        (insn_blt && $signed(rs1_data) < $signed(rs2_data)) ||
+		        (insn_bge && $signed(rs1_data) >= $signed(rs2_data)) ||
+		        (insn_bltu && rs1_data < rs2_data) ||
+		        (insn_bgeu && rs1_data >= rs2_data)
+	) pcNext = pcCurrent + imm_b_sext; 
       end
       OpEnviron: begin
         halt = 1; 
