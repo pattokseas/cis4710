@@ -9,16 +9,6 @@
 `include "../hw2a/divider_unsigned.sv"
 `include "../hw2b/cla.sv"
 
-module negative(input wire [31:0] in, output wire [31:0] out);
-    assign out = ~in + 1;
-endmodule
-
-module sub(input wire [31:0] x, y, output wire [31:0] out);
-    wire [31:0] minus_y;
-    negative neg(.in(y), .out(minus_y));
-    cla add(.a(x), .b(minus_y), .cin(0), .sum(out));
-endmodule
-
 module RegFile (
     input logic [4:0] rd,
     input logic [`REG_SIZE] rd_data,
