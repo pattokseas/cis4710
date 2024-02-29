@@ -56,10 +56,10 @@ module DatapathSingleCycle (
     output logic [`REG_SIZE] pc_to_imem,
     input wire [`REG_SIZE] insn_from_imem,
     // addr_to_dmem is a read-write port
-    output wire [`REG_SIZE] addr_to_dmem,
+    output logic [`REG_SIZE] addr_to_dmem,
     input logic [`REG_SIZE] load_data_from_dmem,
-    output wire [`REG_SIZE] store_data_to_dmem,
-    output wire [3:0] store_we_to_dmem
+    output logic [`REG_SIZE] store_data_to_dmem,
+    output logic [3:0] store_we_to_dmem
 );
 
   // components of the instruction
@@ -332,7 +332,7 @@ module DatapathSingleCycle (
         else if (insn_lbu) rd_data = { 24'b0, load[7:0] };
         else if (insn_lhu) rd_data = { 16'b0, load[15:0] };
         else illegal_insn = 1'b1;  
-        addr_to_dmem &= ~32'b11;
+        addr_to_dmem &= ~32'b11; 
       end
       OpStore: begin  
         addr_to_dmem = rs1_data + imm_s_sext;
@@ -342,7 +342,7 @@ module DatapathSingleCycle (
         else illegal_insn = 1'b1;
         store_data_to_dmem = rs2_data << addr_to_dmem[1:0] * 8;
         store_we_to_dmem <<= addr_to_dmem[1:0]; 
-        addr_to_dmem &= ~32'b11;
+        addr_to_dmem &= ~32'b11; 
       end
       OpJal: begin
         reg_we = 1'b1;
