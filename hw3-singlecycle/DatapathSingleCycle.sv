@@ -219,6 +219,14 @@ module DatapathSingleCycle (
   logic [31:0] x, y, sum;
   cla adder(.a(x), .b(y), .cin(0), .sum(sum));
 
+  // set up divider
+  logic [31:0] remainder, quotient;
+  divider_unsigned divider(.i_dividend(x), .i_divisor(y),
+    .o_remainder(remainder), .o_quotient(quotient));
+  
+  logic [63:0] product;
+  logic [31:0] load, addr;
+
   logic illegal_insn;
 
   always_comb begin
@@ -232,20 +240,33 @@ module DatapathSingleCycle (
     x = 32'b0;
     y = 32'b0;
 
+    product = 64'b0;
+
+    load = 32'b0;
+    addr = 32'b0;
+
+    addr_to_dmem = 32'b0;
+    store_data_to_dmem = 32'b0;
+    store_we_to_dmem = 4'b0;
+
     case (insn_opcode)
       OpLui: begin
         reg_we = 1'b1;
-	rd_data = { insn_from_imem[31:12], 12'b0 };
+	      rd_data = { insn_from_imem[31:12], 12'b0 };
+      end
+      OpAuipc: begin
+        reg_we = 1'b1;
+        rd_data = pcCurrent + { insn_from_imem[31:12], 12'b0 };
       end
       OpRegImm: begin
         reg_we = 1;
         x = rs1_data;
         y = imm_i_sext;
-        if 	(insn_addi)  rd_data = sum;
+        if (insn_addi)  rd_data = sum;
         else if (insn_slti)  rd_data = ($signed(rs1_data) < $signed(imm_i_sext)) ? 32'b1 : 32'b0;
-	else if (insn_sltiu) rd_data = (rs1_data < imm_i_sext) ? 32'b1 : 32'b0;
+	      else if (insn_sltiu) rd_data = (rs1_data < imm_i_sext) ? 32'b1 : 32'b0;
         else if (insn_xori)  rd_data = rs1_data ^ imm_i_sext;
-	else if (insn_ori)   rd_data = rs1_data | imm_i_sext; 
+	      else if (insn_ori)   rd_data = rs1_data | imm_i_sext; 
         else if (insn_andi)  rd_data = rs1_data & imm_i_sext;
         else if (insn_slli)  rd_data = rs1_data << imm_i_sext[4:0];
         else if (insn_srli)  rd_data = rs1_data >> imm_i_sext[4:0];
@@ -258,30 +279,95 @@ module DatapathSingleCycle (
         y = rs2_data;
         if      (insn_add)  rd_data = sum;
         else if (insn_sub)  begin 
-		y = ~rs2_data + 1'b1; 
-		rd_data = sum;
-	end
-        else if (insn_sll)  rd_data = rs1_data << rs2_data[4:0];
-	else if (insn_slt)  rd_data = $signed(rs1_data) < $signed(rs2_data) ? 32'b1 : 32'b0;
-	else if (insn_sltu) rd_data = (rs1_data < rs2_data) ? 32'b1 : 32'b0;
-	else if (insn_xor)  rd_data = rs1_data ^ rs2_data;
-	else if (insn_srl)  rd_data = rs1_data >> rs2_data[4:0];
-        else if (insn_sra)  rd_data = $signed(rs1_data) >>> rs2_data[4:0];
-	else if (insn_or)   rd_data = rs1_data | rs2_data;
-	else if (insn_and)  rd_data = rs1_data & rs2_data;
+		      y = ~rs2_data + 1'b1; 
+		      rd_data = sum;
+	        end
+        else if (insn_sll)    rd_data = rs1_data << rs2_data[4:0];
+	      else if (insn_slt)    rd_data = $signed(rs1_data) < $signed(rs2_data) ? 32'b1 : 32'b0;
+	      else if (insn_sltu)   rd_data = (rs1_data < rs2_data) ? 32'b1 : 32'b0;
+	      else if (insn_xor)    rd_data = rs1_data ^ rs2_data;
+	      else if (insn_srl)    rd_data = rs1_data >> rs2_data[4:0];
+        else if (insn_sra)    rd_data = $signed(rs1_data) >>> rs2_data[4:0];
+	      else if (insn_or)     rd_data = rs1_data | rs2_data;
+	      else if (insn_and)    rd_data = rs1_data & rs2_data;
+        else if (insn_mul)    rd_data = rs1_data * rs2_data;
+        else if (insn_mulh)   begin
+          product = { {32{rs1_data[31]}}, rs1_data} * { {32{rs2_data[31]}}, rs2_data};
+          rd_data = product[63:32];
+          end
+        else if (insn_mulhsu) begin
+          product = { {32{rs1_data[31]}}, rs1_data} * {32'b0, rs2_data};
+          rd_data = product[63:32];
+          end
+        else if (insn_mulhu)  begin
+          product = rs1_data * rs2_data;
+          rd_data = product[63:32];    
+          end
+        else if (insn_div)    begin
+            if (rs1_data[31]) x = ~rs1_data + 32'b1;
+            if (rs2_data[31]) y = ~rs2_data + 32'b1;
+            rd_data = rs1_data[31] != rs2_data[31] && rs2_data != 0 ? ~quotient + 32'b1 : quotient;
+          end
+        else if (insn_divu)   rd_data = quotient;
+        else if (insn_rem)    begin
+            if (rs1_data[31]) x = ~rs1_data + 32'b1;
+            if (rs2_data[31]) y = ~rs2_data + 32'b1;
+            rd_data = rs1_data[31] ? ~remainder + 32'b1 : remainder;
+          end
+        else if (insn_remu)   rd_data = remainder;
         else illegal_insn = 1'b1;
+      end
+      OpLoad: begin 
+        reg_we = 1'b1;
+        addr_to_dmem =rs1_data + imm_i_sext;
+        case(addr_to_dmem[1:0])
+            2'b00: load = load_data_from_dmem;
+            2'b01: load = { 8'b0, load_data_from_dmem[31:8] };
+            2'b10: load = { 16'b0, load_data_from_dmem[31:16] };
+            2'b11: load = { 24'b0, load_data_from_dmem[31:24] };
+        endcase
+        if      (insn_lb)  rd_data = { {24{load[7]}}, load[7:0]};
+        else if (insn_lh)  rd_data = { {16{load[15]}}, load[15:0]};
+        else if (insn_lw)  rd_data = load;
+        else if (insn_lbu) rd_data = { 24'b0, load[7:0] };
+        else if (insn_lhu) rd_data = { 16'b0, load[15:0] };
+        else illegal_insn = 1'b1;  
+        addr_to_dmem &= ~32'b11;
+      end
+      OpStore: begin  
+        addr_to_dmem = rs1_data + imm_s_sext;
+        if      (insn_sb) store_we_to_dmem = 4'b0001;
+        else if (insn_sh) store_we_to_dmem = 4'b0011;
+        else if (insn_sw) store_we_to_dmem = 4'b1111;
+        else illegal_insn = 1'b1;
+        store_data_to_dmem = rs2_data << addr_to_dmem[1:0] * 8;
+        store_we_to_dmem <<= addr_to_dmem[1:0]; 
+        addr_to_dmem &= ~32'b11;
+      end
+      OpJal: begin
+        reg_we = 1'b1;
+        rd_data = pcCurrent + 4;
+        pcNext = pcCurrent + imm_j_sext;
+      end
+      OpJalr: begin
+        reg_we = 1'b1;
+        rd_data = pcCurrent + 4;
+        pcNext = (rs1_data + imm_i_sext) & ~32'b1;
       end
       OpBranch: begin
           if((insn_beq && rs1_data == rs2_data) ||
-	     (insn_bne && rs1_data != rs2_data) ||
+	           (insn_bne && rs1_data != rs2_data) ||
              (insn_blt && $signed(rs1_data) < $signed(rs2_data)) ||
-	     (insn_bge && $signed(rs1_data) >= $signed(rs2_data)) ||
+	           (insn_bge && $signed(rs1_data) >= $signed(rs2_data)) ||
              (insn_bltu && rs1_data < rs2_data) ||
-	     (insn_bgeu && rs1_data >= rs2_data)
-            ) pcNext = pcCurrent + imm_b_sext; 
+	           (insn_bgeu && rs1_data >= rs2_data)) 
+                pcNext = pcCurrent + imm_b_sext; 
       end
       OpEnviron: begin
         halt = 1; 
+      end
+      OpMiscMem: begin
+
       end
       default: begin
         illegal_insn = 1'b1;
