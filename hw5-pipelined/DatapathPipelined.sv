@@ -102,9 +102,8 @@ module decode_insn(input logic [31:0] insn,
 );
   logic [6:0] funct7;
   logic [2:0] funct3;
-  logic [4:0] l_rd;
-  assign {funct7, rs2, rs1, funct3, l_rd, insn_opcode} = insn;
-
+  assign {funct7, rs2, rs1, funct3, rd, insn_opcode} = insn;
+  
   assign imm_i = insn[31:20];
   assign imm_s[11:5] = funct7, imm_s[4:0] = rd;
   assign {imm_b[12], imm_b[10:5]} = funct7, {imm_b[4:1], imm_b[11]} = rd, imm_b[0] = 1'b0;
@@ -174,8 +173,6 @@ module decode_insn(input logic [31:0] insn,
     insn_opcode == 7'b11_100_11 && insn[31:7] == 25'd0 ? INSN_ECALL :
     insn_opcode == 7'b00_011_11 ? INSN_FENCE :
     INSN_INVALID; 
-
-  assign rd = insn_opcode == 7'b11_000_11 ? 0 : l_rd;
 
 endmodule
 
@@ -408,9 +405,10 @@ module DatapathPipelined (
   
   
   // register file
-  logic [31:0] rf_rs1_data, rf_rs2_data;
+  logic [31:0] rf_rs1_data, rf_rs2_data, rd_data;
+  logic rd_we;
   RegFile rf(.rd(write_state.rd), .rs1(execute_state.rs1), .rs2(execute_state.rs2),
-	     .rd_data(write_state.d), .clk(clk), .we(write_state.we), .rst(rst),
+	     .rd_data(rd_data), .clk(clk), .we(rd_we), .rst(rst),
 	     .rs1_data(rf_rs1_data), .rs2_data(rf_rs2_data)); 
 
   // CLA
@@ -485,6 +483,14 @@ module DatapathPipelined (
     end
   end
 
+  wire [255:0] x_disasm;
+  Disasm #(
+      .PREFIX("X")
+  ) disasm_1execute ( 
+      .insn(execute_state.insn),
+      .disasm(x_disasm)
+  );
+
   logic x_halt, reg_we;
   logic [31:0] rs1_data, rs2_data, reg_data, mem_data, mem_addr;
   logic [3:0] mem_we;
@@ -497,17 +503,21 @@ module DatapathPipelined (
     rs2_data = rf_rs2_data;
     
     // WX bypass
-    if (write_state.rd == execute_state.rs1 && execute_state.rs1 != 0)
+    if (write_state.we && write_state.rd == execute_state.rs1 && 
+            execute_state.rs1 != 0)
       rs1_data = write_state.d;
-    if (write_state.rd == execute_state.rs2 && execute_state.rs2 != 0)
+    if (write_state.we && write_state.rd == execute_state.rs2 && 
+            execute_state.rs2 != 0)
       rs2_data = write_state.d;
 
     // MX bypass
-    if (memory_state.reg_dest == execute_state.rs1 && execute_state.rs1 != 0)
+    if (memory_state.reg_we && memory_state.reg_dest == execute_state.rs1 && 
+            execute_state.rs1 != 0)
       rs1_data = memory_state.reg_data;
-    if (memory_state.reg_dest == execute_state.rs2 && execute_state.rs2 != 0)
+    if (memory_state.reg_we && memory_state.reg_dest == execute_state.rs2 && 
+            execute_state.rs2 != 0)
       rs2_data = memory_state.reg_data;
-
+    
   end
 
   always_comb begin
@@ -800,6 +810,19 @@ module DatapathPipelined (
         mem_we: 0,
         halt: 0
       };
+    end else if (branching) begin
+      memory_state <= '{
+        pc: execute_state.pc,
+        insn: execute_state.insn,
+        cycle_status: execute_state.cycle_status,
+        reg_data: 0,
+        reg_dest: 0,
+        reg_we: 0,
+        mem_data: 0,
+        mem_addr: 0,
+        mem_we: 0,
+        halt: 0
+      };
     end else begin 
       memory_state <= '{
         pc: execute_state.pc,
@@ -815,6 +838,14 @@ module DatapathPipelined (
       };
     end
   end
+
+  wire [255:0] m_disasm;
+  Disasm #(
+    .PREFIX("M")
+  ) disasm_1memory (
+    .insn(memory_state.insn), 
+    .disasm(m_disasm)
+  );
 
   assign addr_to_dmem = memory_state.mem_addr;
   assign store_data_to_dmem = memory_state.mem_data;
@@ -847,11 +878,28 @@ module DatapathPipelined (
     end
   end
 
-  assign halt = write_state.halt;
+  wire [255:0] w_disasm;
+  Disasm #(
+    .PREFIX("W")
+  ) disasm_1writeback (
+    .insn(write_state.insn),
+    .disasm(w_disasm)
+  );
+
   assign trace_writeback_pc = write_state.pc;
   assign trace_writeback_insn = write_state.insn;
   assign trace_writeback_cycle_status = write_state.cycle_status;
-  
+    
+  always_comb begin
+    rd_data = 0;
+    rd_we = 0;
+    if(write_state.we == 1) begin
+      rd_data = write_state.d;
+      rd_we = 1;
+    end
+    halt = write_state.halt;
+  end
+
 endmodule
 
 module MemorySingleCycle #(
