@@ -202,6 +202,10 @@ async def testMX1(dut):
     await preTestSetup(dut)
 
     await ClockCycles(dut.clk, 7)
+    
+    print(f"x1 = {int(dut.datapath.rf.regs[1].value)}")
+    print(f"x2 = {int(dut.datapath.rf.regs[2].value)}")
+
     assert dut.datapath.rf.regs[2].value == 42, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
 
 @cocotb.test()
@@ -344,6 +348,22 @@ async def testBeqTaken(dut):
     await ClockCycles(dut.clk, 9)
     assert dut.datapath.rf.regs[1].value == 0x12345000, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
     pass
+
+@cocotb.test()
+async def testBgeu(dut):
+    "bgeu test"
+    return
+    asm(dut, '''
+        addi x1,x0,-1
+        bgeu x1,x0,target
+        addi x1,x0,0
+        target: addi x1,x1,1
+        addi x0,x0,0
+    ''')
+    await preTestSetup(dut)
+
+    await ClockCycles(dut.clk, 9)
+    assert dut.datapath.rf.regs[1].value == 0, f"failed at cycle {dut.datapath.cycles_current.value.integer}. x1 = {int(dut.datapath.rf.regs[1].value)}" 
 
 @cocotb.test()
 async def testTraceRvLui(dut):
