@@ -327,7 +327,7 @@ async def testBneTaken(dut):
         addi x0,x0,0
         ''')
     await preTestSetup(dut)
-
+    
     await ClockCycles(dut.clk, 9)
     assert dut.datapath.rf.regs[1].value == 0x12345000, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
     pass
@@ -388,8 +388,8 @@ async def testLoadUse1(dut):
         add x2,x1,x0
         ''')
     await preTestSetup(dut)
-
     await ClockCycles(dut.clk, 8)
+    assert dut.datapath.rf.regs[1].value == 0x0000_2083, f'lw did not work'
     assert dut.datapath.rf.regs[2].value == 0x0000_2083, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
     pass
 
@@ -427,7 +427,6 @@ async def testWMData(dut):
         sw x1,12(x0)
         ''')
     await preTestSetup(dut)
-
     await ClockCycles(dut.clk, 7)
     assert dut.the_mem.mem[3].value == 0x0000_2083, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
     pass
@@ -441,9 +440,10 @@ async def testWMAddress(dut):
         ''')
     await preTestSetup(dut)
     loadValue = 0x2083
-
+    
     await ClockCycles(dut.clk, 5) # sb in X stage
     assert dut.the_mem.mem[int(loadValue / 4)].value == 0, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
+    
     await ClockCycles(dut.clk, 1) # sb reaches M stage, writes to memory
     assert dut.the_mem.mem[int(loadValue / 4)].value == 0x8300_0000, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
     pass
@@ -471,7 +471,7 @@ async def testDiv(dut):
         lui x1,0x12345
         div x2,x1,x1''')
     await preTestSetup(dut)
-
+    
     await ClockCycles(dut.clk, 7)
     assert dut.datapath.rf.regs[2].value == 1, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
 
