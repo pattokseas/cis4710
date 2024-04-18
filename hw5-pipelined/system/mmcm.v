@@ -73,10 +73,10 @@
 //`define CLOCK_12_MHZ
 //`define CLOCK_13_MHZ
 //`define CLOCK_14_MHZ
-//`define CLOCK_15_MHZ
+`define CLOCK_15_MHZ
 //`define CLOCK_16_MHZ
 //`define CLOCK_20_MHZ
-`define CLOCK_25_MHZ
+//`define CLOCK_25_MHZ
 //`define CLOCK_30_MHZ
 //`define CLOCK_32_MHZ
 //`define CLOCK_35_MHZ

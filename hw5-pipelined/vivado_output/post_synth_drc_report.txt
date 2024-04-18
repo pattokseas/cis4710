@@ -1,8 +1,8 @@
 Copyright 1986-2020 Xilinx, Inc. All Rights Reserved.
 ------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2020.2 (lin64) Build 3064766 Wed Nov 18 09:12:47 MST 2020
-| Date         : Thu Apr  4 00:58:21 2024
-| Host         : big03.seas.upenn.edu running 64-bit openSUSE Leap 15.5
+| Date         : Wed Apr 17 21:07:56 2024
+| Host         : big07.seas.upenn.edu running 64-bit openSUSE Leap 15.5
 | Command      : report_drc -file ./vivado_output/post_synth_drc_report.txt
 | Design       : RiscvSystem
 | Device       : xc7z020clg484-1
@@ -24,15 +24,16 @@ Table of Contents
       Design limits: <entire design considered>
            Ruledeck: default
              Max violations: <unlimited>
-             Violations found: 61
-+--------+----------+------------------------+------------+
-| Rule   | Severity | Description            | Violations |
-+--------+----------+------------------------+------------+
-| DPIP-1 | Warning  | Input pipelining       | 30         |
-| DPOP-1 | Warning  | PREG Output pipelining | 15         |
-| DPOP-2 | Warning  | MREG Output pipelining | 15         |
-| ZPS7-1 | Warning  | PS7 block required     | 1          |
-+--------+----------+------------------------+------------+
+             Violations found: 62
++-------------+----------+-------------------------------------------------------------+------------+
+| Rule        | Severity | Description                                                 | Violations |
++-------------+----------+-------------------------------------------------------------+------------+
+| DPIP-1      | Warning  | Input pipelining                                            | 30         |
+| DPOP-1      | Warning  | PREG Output pipelining                                      | 15         |
+| DPOP-2      | Warning  | MREG Output pipelining                                      | 15         |
+| PLHOLDVIO-2 | Warning  | Non-Optimal connections which could lead to hold violations | 1          |
+| ZPS7-1      | Warning  | PS7 block required                                          | 1          |
++-------------+----------+-------------------------------------------------------------+------------+
 
 2. REPORT DETAILS
 -----------------
@@ -334,6 +335,19 @@ Related violations: <none>
 DPOP-2#15 Warning
 MREG Output pipelining  
 DSP datapath/p_0_out__9 multiplier stage datapath/p_0_out__9/P[47:0] is not pipelined (MREG=0). Pipelining the multiplier function will improve performance and will save significant power so it is suggested whenever possible to fully pipeline this function.  If this multiplier was inferred, it is suggested to describe an additional register stage after this function.  If there is no registered adder/accumulator following the multiply function, two pipeline stages are suggested to allow both the MREG and PREG registers to be used.  If the DSP48 was instantiated in the design, it is suggested to set both the MREG and PREG attributes to 1 when performing multiply functions.
+Related violations: <none>
+
+PLHOLDVIO-2#1 Warning
+Non-Optimal connections which could lead to hold violations  
+A LUT mem_reg_0_0_i_1 is driving clock pin of 33 cells. This could lead to large hold time violations. Involved cells are:
+w_state_reg[rd_data][0]_i_17, w_state_reg[rd_data][10]_i_10,
+w_state_reg[rd_data][10]_i_8, w_state_reg[rd_data][11]_i_12,
+w_state_reg[rd_data][11]_i_13, w_state_reg[rd_data][11]_i_16,
+w_state_reg[rd_data][12]_i_28, w_state_reg[rd_data][13]_i_19,
+w_state_reg[rd_data][14]_i_33, w_state_reg[rd_data][15]_i_20,
+w_state_reg[rd_data][16]_i_16, w_state_reg[rd_data][17]_i_7,
+w_state_reg[rd_data][18]_i_7, w_state_reg[rd_data][19]_i_8,
+w_state_reg[rd_data][1]_i_9 (the first 15 of 33 listed)
 Related violations: <none>
 
 ZPS7-1#1 Warning
