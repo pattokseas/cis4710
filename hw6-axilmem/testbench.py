@@ -112,6 +112,9 @@ async def preTestSetup(dut):
     # lower `rst` signal
     dut.rst.value = 0
     # design should be reset now
+
+    # await ClockCycles(dut.clk, 1)
+
     return
 
 def runCocotbTests(pytestconfig):
@@ -176,12 +179,43 @@ if __name__ == "__main__":
 ## TEST CASES GO HERE ##
 ########################
 
+def doNothing(dut):
+    pass
+
+async def run_cycles(dut, n_cycles, each = doNothing):
+    for i in range(n_cycles):
+        print(f"cycle {i + 1}")
+        await ClockCycles(dut.clk, 1)
+        each(dut)
+        print("")
+
+def print_states(dut):
+    print(f"F pc:{dut.datapath.f_pc_current.value.integer}, insn:{dut.datapath.f_insn.value.integer}, cycle:{dut.datapath.f_cycle_status.value.integer}")
+    print(f"D pc:{dut.datapath.d_state_pc.value.integer}, insn:{dut.datapath.d_insn.value.integer}, cycle:{dut.datapath.d_state_cycle_status.value.integer}")
+    print(f"X pc:{dut.datapath.x_state_pc.value.integer}, insn:{dut.datapath.x_state_insn.value.integer}, cycle:{dut.datapath.x_state_cycle_status.value.integer}, imm_u:{dut.datapath.x_state_imm_u_shifted.value.integer}")
+    print(f"M pc:{dut.datapath.m_state_pc.value.integer}, insn:{dut.datapath.m_state_insn.value.integer}, cycle:{dut.datapath.m_state_cycle_status.value.integer}")
+    print(f"W pc:{dut.datapath.w_state_pc.value.integer}, insn:{dut.datapath.w_state_insn.value.integer}, cycle:{dut.datapath.w_state_cycle_status.value.integer}")
+
+def print_regfile(dut):
+    print(f"rd: {dut.datapath.w_state_rd.value.integer}, rd_data: {dut.datapath.w_rd_data.value.integer}, rs1:{dut.datapath.x_state_rs1.value.integer}, rs2:{dut.datapath.x_state_rs2.value.integer}, we:{dut.datapath.w_state_reg_we.value.integer}")
+    print(f"x1: {dut.datapath.rf.regs[1].value.integer}, x2: {dut.datapath.rf.regs[2].value.integer}, x3: {dut.datapath.rf.regs[3].value.integer}, x4: {dut.datapath.rf.regs[4].value.integer}")
+
+def print_states_regfile(dut):
+    print_states(dut)
+    print_regfile(dut)
+
+def print_regs(dut):
+    print(f"x1: {dut.datapath.rf.regs[1].value.integer}, x2: {dut.datapath.rf.regs[2].value.integer}, x3: {dut.datapath.rf.regs[3].value.integer}, x4: {dut.datapath.rf.regs[4].value.integer}")
+
 @cocotb.test()
 async def testLui(dut):
     "Run one lui insn"
     asm(dut, 'lui x1,0x12345')
     await preTestSetup(dut)
-
+    def p_w_rddata(dut):
+        print(f"w_rd_data:{dut.datapath.m_state_rd_data.value.integer}, we:{dut.datapath.m_state_reg_we.value.integer}")
+        print_regs(dut)
+    # await run_cycles(dut, 6, print_states_regfile)
     await ClockCycles(dut.clk, 6)
     assert dut.datapath.rf.regs[1].value == 0x12345000, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
 
@@ -356,12 +390,14 @@ async def testFence(dut):
 async def testDiv(dut):
     "Run div insn"
     asm(dut, '''
-        lui x1,0x12345
-        div x2,x1,x1''')
+        addi x1,x0,10
+        addi x2,x0,2
+        addi x5,x0,5
+        div x3,x1,x2''')
     await preTestSetup(dut)
 
-    await ClockCycles(dut.clk, 7)
-    assert dut.datapath.rf.regs[2].value == 1, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
+    await ClockCycles(dut.clk, 9)
+    assert dut.datapath.rf.regs[3].value == dut.datapath.rf.regs[5].value, f'failed at cycle {dut.datapath.cycles_current.value.integer}'
 
 @cocotb.test(skip='RVTEST_ALUBR' in os.environ)
 async def testDivUse(dut):
